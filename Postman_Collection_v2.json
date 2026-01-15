@@ -1,0 +1,308 @@
+{
+  "info": {
+    "name": "Job Recommendation API - With Multi-API Scraper",
+    "description": "Complete API collection with integrated job scraping from 6 APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["health"]
+            },
+            "description": "Check if API is running"
+          }
+        },
+        {
+          "name": "Get API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": [""]
+            },
+            "description": "Get API information and available endpoints"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resume Processing",
+      "item": [
+        {
+          "name": "Upload Resume & Get Recommendations",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a PDF resume file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/upload-resume",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["upload-resume"]
+            },
+            "description": "Upload resume PDF and get job recommendations with skills extraction"
+          }
+        },
+        {
+          "name": "Analyze Resume (Skills Only)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a PDF resume file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/analyze-resume",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["analyze-resume"]
+            },
+            "description": "Extract skills from resume without job matching"
+          }
+        },
+        {
+          "name": "Get Recommendations with Custom Top N",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a PDF resume file"
+                },
+                {
+                  "key": "top_n",
+                  "value": "10",
+                  "type": "text",
+                  "description": "Number of recommendations to return"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/get-recommendations?top_n=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["get-recommendations"],
+              "query": [
+                {
+                  "key": "top_n",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get job recommendations with custom number of results"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Job Scraping (NEW!)",
+      "item": [
+        {
+          "name": "Scrape Jobs from All APIs (Python/USA)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/scrape-jobs?keyword=python&location=USA",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["scrape-jobs"],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "python",
+                  "description": "Job search keyword"
+                },
+                {
+                  "key": "location",
+                  "value": "USA",
+                  "description": "Job location"
+                }
+              ]
+            },
+            "description": "Scrape jobs from 6 different APIs: GitHub, Jooble, Adzuna, RemoteOK, Working Nomads, Stack Overflow. Results cached for 24 hours."
+          }
+        },
+        {
+          "name": "Scrape JavaScript Jobs",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/scrape-jobs?keyword=javascript&location=USA",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["scrape-jobs"],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "javascript"
+                },
+                {
+                  "key": "location",
+                  "value": "USA"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Scrape Remote Jobs",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/scrape-jobs?keyword=python&location=Remote",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["scrape-jobs"],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "python"
+                },
+                {
+                  "key": "location",
+                  "value": "Remote"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Scrape Jobs - Custom Keyword & Location",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/scrape-jobs?keyword=java&location=UK",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["scrape-jobs"],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "java",
+                  "description": "Change to any keyword"
+                },
+                {
+                  "key": "location",
+                  "value": "UK",
+                  "description": "Change to any location"
+                }
+              ]
+            },
+            "description": "Customize both keyword and location for job scraping"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Job Management",
+      "item": [
+        {
+          "name": "List All Jobs (From DB)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/jobs?skip=0&limit=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["jobs"],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0",
+                  "description": "Number of items to skip"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number of items to return"
+                }
+              ]
+            },
+            "description": "Get all available jobs with pagination"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Skill-Based Recommendations",
+      "item": [
+        {
+          "name": "Recommend by Skills (No File Upload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skills\": [\"Python\", \"Django\", \"FastAPI\", \"REST API\"],\n  \"top_n\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/recommend-by-skills",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["recommend-by-skills"]
+            },
+            "description": "Get job recommendations by providing skills directly (stateless, no file upload needed)"
+          }
+        }
+      ]
+    }
+  ]
+}
+
