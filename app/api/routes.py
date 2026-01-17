@@ -44,11 +44,11 @@ async def upload_resume(file: UploadFile = File(..., description="PDF resume fil
         if not file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-        # Save the file
-        file_path = await save_pdf(file)
+        # Save the file (returns tuple: file_path, storage_url)
+        file_path, storage_url = await save_pdf(file)
 
         # Get recommendations
-        result = recommend_jobs_from_pdf(file_path, top_n=5, use_scraped=False)
+        result = await recommend_jobs_from_pdf(file_path, top_n=5, use_scraped=False)
 
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Processing failed"))
@@ -57,6 +57,8 @@ async def upload_resume(file: UploadFile = File(..., description="PDF resume fil
             "success": True,
             "message": "Resume processed successfully",
             "file_name": file.filename,
+            "file_path": file_path,
+            "storage_url": storage_url,
             "skills": result.get("skills", []),
             "recommendations": result.get("recommendations", [])
         }
@@ -78,13 +80,14 @@ async def analyze_resume(file: UploadFile = File(..., description="PDF resume fi
         if not file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-        file_path = await save_pdf(file)
+        # Save the file (returns tuple: file_path, storage_url)
+        file_path, storage_url = await save_pdf(file)
 
         # Extract text and skills
         from app.services.pdf_parser import extract_text_from_pdf
         from app.services.skill_extractor import extract_skills
 
-        text = extract_text_from_pdf(file_path)
+        text = await extract_text_from_pdf(file_path)
         skills = extract_skills(text, top_n=15)
 
         return {
@@ -110,8 +113,9 @@ async def get_recommendations(file: UploadFile = File(..., description="PDF resu
         if not file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-        file_path = await save_pdf(file)
-        result = recommend_jobs_from_pdf(file_path, top_n=top_n, use_scraped=False)
+        # Save the file (returns tuple: file_path, storage_url)
+        file_path, storage_url = await save_pdf(file)
+        result = await recommend_jobs_from_pdf(file_path, top_n=top_n, use_scraped=False)
 
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))

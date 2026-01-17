@@ -10,9 +10,18 @@ app = FastAPI(
 )
 
 # Enable CORS
+allowed_origins = ["*"]  # Default fallback
+
+# Add client URLs if configured
+if settings.CLIENT_URL1 or settings.CLIENT_URL2 or settings.CLIENT_URL3:
+    allowed_origins = [
+        url for url in [settings.CLIENT_URL1, settings.CLIENT_URL2, settings.CLIENT_URL3]
+        if url is not None
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

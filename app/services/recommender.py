@@ -5,7 +5,7 @@ from app.services.scraper import scrape_all_jobs
 from app.db.fake_db import JOBS_DB
 
 
-def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: bool = False) -> dict:
+async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: bool = False) -> dict:
     """
     Main function to generate job recommendations from a resume PDF.
 
@@ -19,7 +19,7 @@ def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: bool = 
     """
     try:
         # Step 1: Extract text from PDF
-        resume_text = extract_text_from_pdf(file_path)
+        resume_text = await extract_text_from_pdf(file_path)
 
         if not resume_text:
             return {
