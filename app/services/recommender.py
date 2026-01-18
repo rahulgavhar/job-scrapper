@@ -1,17 +1,15 @@
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.skill_extractor import extract_skills
 from app.services.matcher import match_jobs
-from app.services.scraper import scrape_all_jobs
 
 
-async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: bool = False) -> dict:
+async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5) -> dict:
     """
     Main function to generate job recommendations from a resume PDF.
 
     Args:
         file_path (str): Path to the uploaded PDF resume
         top_n (int): Number of job recommendations to return
-        use_scraped (bool): Whether to include scraped jobs
 
     Returns:
         Dictionary containing extracted skills and recommended jobs with match scores
@@ -50,18 +48,9 @@ async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: b
                 }
             }
 
-        # Step 3: Match skills with available jobs from Supabase
-        # match_jobs() internally gets jobs from Supabase via get_all_jobs()
-        if use_scraped:
-            try:
-                print("🌐 Attempting to scrape fresh jobs...")
-                scraped_jobs = scrape_all_jobs()
-                print(f"✓ Scraped {len(scraped_jobs)} jobs")
-                # Jobs are automatically cached in Supabase
-            except Exception as e:
-                print(f"⚠️ Warning: Failed to scrape jobs: {e}")
-
-        # Step 4: Get job recommendations
+        # Step 3: Match skills with jobs from Supabase cache
+        # Jobs are scraped automatically every 24h via Celery background task
+        # match_jobs() internally gets jobs from Supabase via get_cached_jobs()
         print(f"🎯 Matching {len(skills)} skills with available jobs...")
         recommended_jobs = match_jobs(skills, top_n=top_n)
         print(f"✓ Found {len(recommended_jobs)} job recommendations")

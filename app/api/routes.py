@@ -60,7 +60,7 @@ async def upload_resume(file: UploadFile = File(..., description="PDF resume fil
         print(f"📂 File path: {file_path}")
         print(f"{'='*60}\n")
 
-        result = await recommend_jobs_from_pdf(file_path, top_n=5, use_scraped=False)
+        result = await recommend_jobs_from_pdf(file_path, top_n=5)
 
         if not result.get("success"):
             print(f"❌ Processing failed: {result.get('error')}")
@@ -134,7 +134,7 @@ async def get_recommendations(file: UploadFile = File(..., description="PDF resu
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
         file_path, storage_url = await save_pdf(file)
-        result = await recommend_jobs_from_pdf(file_path, top_n=top_n, use_scraped=False)
+        result = await recommend_jobs_from_pdf(file_path, top_n=top_n)
 
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))

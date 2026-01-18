@@ -154,11 +154,15 @@ def archive_old_caches() -> int:
     """
     client = _get_supabase_client()
     if not client or not _ensure_bucket_exists():
+        logger.warning("Cannot archive: client unavailable or bucket not accessible")
         return 0
 
     archived_count = 0
     try:
+        logger.info(f"Checking for cache files older than {ARCHIVE_AGE_DAYS} days...")
         entries = client.storage.from_(JOBS_BUCKET).list("jobs/cache") or []
+        logger.info(f"Found {len(entries)} files in jobs/cache")
+
         now = datetime.now(timezone.utc)
         for entry in entries:
             name = entry.get("name") if isinstance(entry, dict) else getattr(entry, "name", None)
@@ -170,12 +174,17 @@ def archive_old_caches() -> int:
                 data = json.loads(raw.decode("utf-8")) if isinstance(raw, (bytes, bytearray)) else json.loads(raw)
                 scraped_at = data.get("scraped_at")
                 if not scraped_at:
+                    logger.debug(f"Skipping {name}: no scraped_at field")
                     continue
                 try:
                     scraped_dt = datetime.fromisoformat(scraped_at.replace("Z", "+00:00"))
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Skipping {name}: invalid date format - {e}")
                     continue
+
+                age_days = (now - scraped_dt).days
                 if (now - scraped_dt) >= timedelta(days=ARCHIVE_AGE_DAYS):
+                    logger.info(f"Archiving {name} (age: {age_days} days)")
                     # Move: upload to archived then remove original
                     archived_path = f"jobs/archived/{name}"
                     payload = json.dumps(data).encode("utf-8")
@@ -187,8 +196,16 @@ def archive_old_caches() -> int:
                     if not res_up or (isinstance(res_up, dict) and not res_up.get("error")):
                         client.storage.from_(JOBS_BUCKET).remove([f"jobs/cache/{name}"])
                         archived_count += 1
-            except Exception:
+                        logger.info(f"✓ Archived {name} to jobs/archived")
+                    else:
+                        logger.error(f"Failed to archive {name}: {res_up.get('error') if isinstance(res_up, dict) else res_up}")
+                else:
+                    logger.debug(f"Keeping {name} (age: {age_days} days, threshold: {ARCHIVE_AGE_DAYS} days)")
+            except Exception as e:
+                logger.error(f"Error processing {name}: {e}")
                 continue
+
+        logger.info(f"✓ Archiving complete: {archived_count} files moved to jobs/archived")
         return archived_count
     except Exception as e:
         logger.error(f"Error archiving caches: {e}")

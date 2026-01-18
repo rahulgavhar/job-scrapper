@@ -2,8 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pathlib import Path
-import random
-import time
 import logging
 from app.api.routes import router
 from app.core.config import settings
@@ -41,53 +39,14 @@ app.include_router(router)
 
 @app.on_event("startup")
 def start_background_tasks():
-    """Start scheduler for periodic scraping and archiving."""
+    """Kick off background scraping via Celery without blocking startup."""
     try:
-        from apscheduler.schedulers.background import BackgroundScheduler
-        from apscheduler.triggers.interval import IntervalTrigger
-        from app.services.linkedin_scraper_simple import scrape_linkedin_jobs
-        from app.db.supabase_db import save_jobs, archive_old_caches
+        from app.services.tasks import initial_linkedin_scrape
 
-        scheduler = BackgroundScheduler()
-
-        def scrape_task():
-            positions = [
-                "Software Engineer", "Backend Developer", "Frontend Developer", "Data Scientist",
-                "Full Stack Developer", "DevOps Engineer", "Machine Learning Engineer", "Data Engineer",
-            ]
-            locations = [
-                "United States", "India", "Canada", "United Kingdom", "Germany", "Australia",
-                "San Francisco", "New York", "London", "Bangalore", "Berlin", "Sydney",
-            ]
-
-            combos = [(random.choice(positions), random.choice(locations)) for _ in range(6)]
-            random.shuffle(combos)
-
-            for pos, loc in combos:
-                delay = random.uniform(60, 120)  # enforce >=1 minute gap between targets
-                time.sleep(delay)
-                jobs = scrape_linkedin_jobs(pos, loc, max_results=20)
-                if jobs:
-                    save_jobs(jobs, pos, loc)
-            archive_old_caches()
-
-        # Run once immediately on startup
-        try:
-            scrape_task()
-            logger.info("Ran initial scrape_task on startup")
-        except Exception:
-            logger.exception("Initial scrape_task failed")
-
-        scheduler.add_job(
-            scrape_task,
-            IntervalTrigger(hours=24, jitter=180),
-            id="scrape_every_24h",
-            replace_existing=True,
-        )
-        scheduler.start()
-        logger.info("Scheduler started with job scrape_every_24h")
+        initial_linkedin_scrape.delay()
+        logger.info("Enqueued initial_linkedin_scrape Celery task")
     except Exception:
-        logger.exception("Scheduler failed to start")
+        logger.exception("Failed to enqueue initial_linkedin_scrape")
 
 @app.get("/docs", tags=["Docs"], response_class=HTMLResponse)
 def custom_docs():

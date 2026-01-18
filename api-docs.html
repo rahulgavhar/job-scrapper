@@ -75,7 +75,7 @@
 
   <div class="section">
     <h2>Scraping cadence</h2>
-    <p>Scheduler runs every ~26 hours with jitter, scraping random position/location combos (6 per run) with 30–90s backoff between requests, then archives cache files older than 7 days to <code>job-data/jobs/archived</code>. Cached JSON lives in <code>job-data/jobs/cache</code>.</p>
+    <p>Scheduler runs every 24 hours, scraping 3 random position/location combos per run (3 jobs per combo, ~9 jobs total) with 60–120s backoff between requests, then archives cache files older than 7 days to <code>job-data/jobs/archived</code>. Cached JSON lives in <code>job-data/jobs/cache</code>.</p>
   </div>
 </body>
 </html>

@@ -1,35 +1,80 @@
-#!/usr/bin/env python
-"""Start the API Server and display status"""
-import subprocess
+#!/usr/bin/env python3
+"""
+Start script for Render deployment
+Runs Celery worker and FastAPI in a single process with unified logging
+"""
+import os
 import sys
-import time
+import logging
+import multiprocessing
 
-print("=" * 70)
-print("🚀 STARTING JOB RECOMMENDATION API SERVER")
-print("=" * 70)
+# Configure logging format
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] [%(name)s] %(levelname)s: %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 
-print("\n📌 Server Details:")
-print("   Host: 0.0.0.0")
-print("   Port: 8000")
-print("   URL:  http://localhost:8000")
+logger = logging.getLogger(__name__)
 
-print("\n📚 API Documentation:")
-print("   Swagger UI: http://localhost:8000/docs")
-print("   ReDoc:      http://localhost:8000/redoc")
 
-print("\n⏳ Starting server...\n")
+def start_celery_worker():
+    """Start Celery worker in background process"""
+    from app.celery_app import celery_app
 
-try:
-    # Start the server
-    process = subprocess.run(
-        [sys.executable, "-m", "uvicorn", "app.main:app",
-         "--host", "0.0.0.0", "--port", "8000"],
-        cwd=r"C:\Users\rahul\PycharmProjects\PythonProject\job-scrapper"
+    logger.info("Starting Celery worker...")
+
+    # Create worker instance
+    worker = celery_app.Worker(
+        pool='solo',  # Use solo pool for compatibility
+        loglevel='INFO',
+        logfile=None,  # Log to stdout
     )
-except KeyboardInterrupt:
-    print("\n\n✓ Server stopped by user")
-    sys.exit(0)
-except Exception as e:
-    print(f"\n❌ Error: {e}")
-    sys.exit(1)
+
+    worker.start()
+
+
+def start_api_server():
+    """Start FastAPI server"""
+    import uvicorn
+
+    logger.info("Starting FastAPI server...")
+
+    host = os.getenv("API_HOST", "0.0.0.0")
+    port = int(os.getenv("API_PORT", "10000"))
+
+    uvicorn.run(
+        "app.main:app",
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=True,
+    )
+
+
+if __name__ == "__main__":
+    logger.info("=" * 60)
+    logger.info("Starting Job Scraper Application")
+    logger.info("=" * 60)
+
+    # Check Redis connection
+    broker_url = os.getenv("CELERY_BROKER_URL")
+    if broker_url:
+        logger.info(f"Celery Broker: {broker_url[:30]}...")
+    else:
+        logger.warning("CELERY_BROKER_URL not set - using default")
+
+    # Start Celery worker in background process
+    worker_process = multiprocessing.Process(target=start_celery_worker, daemon=True)
+    worker_process.start()
+    logger.info(f"Celery worker started (PID: {worker_process.pid})")
+
+    # Start API server in main process (blocks)
+    try:
+        start_api_server()
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+        worker_process.terminate()
+        worker_process.join()
+        logger.info("Shutdown complete")
 

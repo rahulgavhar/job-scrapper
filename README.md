@@ -93,11 +93,21 @@ pip install -r requirements.txt
 ```
 
 4. **Run the API**
+
+**Option A: Production Mode (Celery + FastAPI)**
+```bash
+python start_api.py
+```
+This starts both Celery worker and FastAPI server in one process with unified logging.
+
+**Option B: Development Mode (FastAPI only)**
 ```bash
 uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`
+
+> **Note**: For production deployment with background job scraping, use `python start_api.py`. This enables Celery workers for non-blocking LinkedIn scraping. See [CELERY_GUIDE.md](CELERY_GUIDE.md) for details.
 
 ### Docker Setup
 
