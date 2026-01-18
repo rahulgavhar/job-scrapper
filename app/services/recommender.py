@@ -2,7 +2,6 @@ from app.services.pdf_parser import extract_text_from_pdf
 from app.services.skill_extractor import extract_skills
 from app.services.matcher import match_jobs
 from app.services.scraper import scrape_all_jobs
-from app.db.fake_db import JOBS_DB
 
 
 async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: bool = False) -> dict:
@@ -19,9 +18,11 @@ async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: b
     """
     try:
         # Step 1: Extract text from PDF
+        print(f"📄 Extracting text from: {file_path}")
         resume_text = await extract_text_from_pdf(file_path)
 
         if not resume_text:
+            print("❌ No text extracted from PDF")
             return {
                 "success": False,
                 "error": "Could not extract text from PDF",
@@ -29,29 +30,41 @@ async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: b
                 "recommendations": []
             }
 
+        print(f"✓ Extracted {len(resume_text)} characters from PDF")
+        print(f"📝 First 200 chars: {resume_text[:200]}")
+
         # Step 2: Extract skills from resume text
         skills = extract_skills(resume_text, top_n=15)
+        print(f"🔍 Extracted {len(skills)} skills: {skills}")
 
         if not skills:
+            print("❌ No skills extracted from resume text")
             return {
                 "success": False,
-                "error": "Could not extract skills from resume",
+                "error": "Could not extract skills from resume. Please ensure your resume contains technical skills like Python, Java, SQL, etc.",
                 "skills": [],
-                "recommendations": []
+                "recommendations": [],
+                "debug_info": {
+                    "text_length": len(resume_text),
+                    "text_sample": resume_text[:500]
+                }
             }
 
-        # Step 3: Get jobs to match against
-        jobs_to_match = list(JOBS_DB)  # Always include database jobs
-
+        # Step 3: Match skills with available jobs from Supabase
+        # match_jobs() internally gets jobs from Supabase via get_all_jobs()
         if use_scraped:
             try:
+                print("🌐 Attempting to scrape fresh jobs...")
                 scraped_jobs = scrape_all_jobs()
-                jobs_to_match.extend(scraped_jobs)
+                print(f"✓ Scraped {len(scraped_jobs)} jobs")
+                # Jobs are automatically cached in Supabase
             except Exception as e:
-                print(f"Warning: Failed to scrape jobs: {e}")
+                print(f"⚠️ Warning: Failed to scrape jobs: {e}")
 
-        # Step 4: Match skills with available jobs
+        # Step 4: Get job recommendations
+        print(f"🎯 Matching {len(skills)} skills with available jobs...")
         recommended_jobs = match_jobs(skills, top_n=top_n)
+        print(f"✓ Found {len(recommended_jobs)} job recommendations")
 
         return {
             "success": True,
@@ -62,11 +75,15 @@ async def recommend_jobs_from_pdf(file_path: str, top_n: int = 5, use_scraped: b
         }
 
     except Exception as e:
+        print(f"❌ EXCEPTION in recommend_jobs_from_pdf: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
-            "error": str(e),
+            "error": f"Processing error: {str(e)}",
             "skills": [],
-            "recommendations": []
+            "recommendations": [],
+            "error_type": type(e).__name__
         }
 
 

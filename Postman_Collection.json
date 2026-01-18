@@ -1,0 +1,170 @@
+{
+  "info": {
+    "_postman_id": "0e9f1f16-6e8a-4c89-9f0e-6c2a2b6a1af1",
+    "name": "Job Scrapper API v2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection for resume upload, analysis, recommendations, and cached jobs (scraping runs automatically every ~26h)."
+  },
+  "item": [
+    {
+      "name": "Health / Ping",
+      "item": [
+        {
+          "name": "Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ping",
+              "host": ["{{base_url}}"],
+              "path": ["ping"]
+            }
+          }
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resume",
+      "item": [
+        {
+          "name": "Upload Resume (with recommendations)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "<path-to-your-resume.pdf>"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload-resume",
+              "host": ["{{base_url}}"],
+              "path": ["upload-resume"]
+            }
+          }
+        },
+        {
+          "name": "Analyze Resume (skills only)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "<path-to-your-resume.pdf>"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/analyze-resume",
+              "host": ["{{base_url}}"],
+              "path": ["analyze-resume"]
+            }
+          }
+        },
+        {
+          "name": "Get Recommendations (custom top_n)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "<path-to-your-resume.pdf>"
+                },
+                {
+                  "key": "top_n",
+                  "type": "text",
+                  "value": "5"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/get-recommendations",
+              "host": ["{{base_url}}"],
+              "path": ["get-recommendations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recommendations by Skills",
+      "item": [
+        {
+          "name": "Recommend by skills",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skills\": [\"python\", \"sql\", \"aws\"],\n  \"top_n\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/recommend-by-skills",
+              "host": ["{{base_url}}"],
+              "path": ["recommend-by-skills"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs (cached)",
+      "item": [
+        {
+          "name": "List cached jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/jobs?skip=0&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["jobs"],
+              "query": [
+                {"key": "skip", "value": "0"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ]
+}

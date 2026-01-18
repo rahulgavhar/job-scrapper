@@ -1,5 +1,5 @@
 from difflib import SequenceMatcher
-from app.db.fake_db import JOBS_DB
+from app.db.supabase_db import get_cached_jobs
 
 
 def normalize_skill(skill: str) -> str:
@@ -28,7 +28,7 @@ def calculate_skill_similarity(user_skill: str, job_skill: str) -> float:
 
 def match_jobs(skills: list[str], top_n: int = 5) -> list[dict]:
     """
-    Match extracted skills with jobs in the database using enhanced scoring.
+    Match extracted skills with jobs from Supabase using enhanced scoring.
 
     Args:
         skills (list[str]): List of skills extracted from resume
@@ -40,11 +40,25 @@ def match_jobs(skills: list[str], top_n: int = 5) -> list[dict]:
     if not skills:
         return []
 
+    # Get jobs from Supabase cache (all)
+    jobs_db = get_cached_jobs() or []
+    if not jobs_db:
+        print("Warning: No jobs available in Supabase. Please scrape jobs first using /api/scrape-jobs-v2")
+        return []
+
     matched_jobs = []
 
     # Score each job based on skill matches
-    for job in JOBS_DB:
+    for job in jobs_db:
+        # Skip if job is not a dict
+        if not isinstance(job, dict):
+            continue
+
         job_skills = job.get("skills", [])
+
+        # Handle skills as string or list
+        if isinstance(job_skills, str):
+            job_skills = [s.strip() for s in job_skills.split(",")]
 
         if not job_skills:
             continue
@@ -76,4 +90,3 @@ def match_jobs(skills: list[str], top_n: int = 5) -> list[dict]:
     matched_jobs.sort(key=lambda x: x["match_score"], reverse=True)
 
     return matched_jobs[:top_n]
-

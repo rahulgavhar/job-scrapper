@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Scrapper API Docs</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f9fc; color: #0f172a; }
+    h1, h2, h3 { margin: 0 0 8px 0; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 20px; margin-top: 24px; }
+    p { margin: 6px 0; line-height: 1.5; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .method { display: inline-block; padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 12px; color: #fff; margin-right: 8px; }
+    .get { background: #0ea5e9; }
+    .post { background: #22c55e; }
+    code { background: #e2e8f0; padding: 2px 5px; border-radius: 4px; font-size: 13px; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .tag { display: inline-block; background: #e2e8f0; border-radius: 999px; padding: 2px 8px; margin-right: 6px; font-size: 12px; }
+    .section { margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <h1>Job Scrapper API</h1>
+  <p>Resume upload and recommendations. Jobs are scraped automatically every ~26h (random targets with backoff) and cached in Supabase. No public scraping endpoint is exposed.</p>
+
+  <div class="section">
+    <h2>Environment</h2>
+    <p><strong>Base URL:</strong> <code>http://localhost:8000</code></p>
+    <p><strong>Auth:</strong> None (ensure server is protected in deployment).</p>
+  </div>
+
+  <div class="section">
+    <h2>Endpoints</h2>
+
+    <div class="card">
+      <div><span class="method get">GET</span><code>/ping</code></div>
+      <p>Simple liveness check. Returns <code>{"message": "API is running"}</code>.</p>
+    </div>
+
+    <div class="card">
+      <div><span class="method get">GET</span><code>/health</code></div>
+      <p>Service health payload with version.</p>
+    </div>
+
+    <div class="card">
+      <div><span class="method post">POST</span><code>/upload-resume</code></div>
+      <p><span class="tag">multipart/form-data</span> Field <code>file</code> (PDF). Extracts skills, stores the PDF to Supabase, and returns top job recommendations (from cached jobs). If none are found, advises to wait for the next automatic scrape.</p>
+      <pre>curl -X POST \
+  -F "file=@/path/to/resume.pdf" \
+  http://localhost:8000/upload-resume</pre>
+    </div>
+
+    <div class="card">
+      <div><span class="method post">POST</span><code>/analyze-resume</code></div>
+      <p><span class="tag">multipart/form-data</span> Field <code>file</code> (PDF). Extracts and returns skills only.</p>
+    </div>
+
+    <div class="card">
+      <div><span class="method post">POST</span><code>/get-recommendations</code></div>
+      <p><span class="tag">multipart/form-data</span> Fields: <code>file</code> (PDF), optional <code>top_n</code> (default 5). Returns matches from cached jobs.</p>
+    </div>
+
+    <div class="card">
+      <div><span class="method post">POST</span><code>/recommend-by-skills</code></div>
+      <p><span class="tag">application/json</span> Body: <code>{ "skills": ["python", "sql"], "top_n": 5 }</code>. Returns matches using cached jobs.</p>
+    </div>
+
+    <div class="card">
+      <div><span class="method get">GET</span><code>/jobs</code></div>
+      <p>Returns cached jobs with pagination. Query: <code>skip</code> (default 0), <code>limit</code> (default 10).</p>
+      <pre>curl "http://localhost:8000/jobs?skip=0&limit=20"</pre>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Scraping cadence</h2>
+    <p>Scheduler runs every ~26 hours with jitter, scraping random position/location combos (6 per run) with 30–90s backoff between requests, then archives cache files older than 7 days to <code>job-data/jobs/archived</code>. Cached JSON lives in <code>job-data/jobs/cache</code>.</p>
+  </div>
+</body>
+</html>

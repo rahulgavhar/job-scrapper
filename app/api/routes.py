@@ -1,12 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from pydantic import BaseModel
-from pathlib import Path
-import json
+import logging
 from app.services.file_service import save_pdf
 from app.services.recommender import recommend_jobs_from_pdf, get_job_recommendations
-from app.db.fake_db import get_all_jobs
+from app.db.supabase_db import get_cached_jobs
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Pydantic models for request/response
@@ -30,6 +30,16 @@ def ping():
     return {"message": "API is running"}
 
 
+@router.get("/health", tags=["Health"])
+def health_check():
+    """API health check endpoint."""
+    return {
+        "status": "ok",
+        "service": "Job Recommendation API",
+        "version": "1.0.0"
+    }
+
+
 @router.post("/upload-resume", tags=["Resume"])
 async def upload_resume(file: UploadFile = File(..., description="PDF resume file")):
     """
@@ -40,28 +50,40 @@ async def upload_resume(file: UploadFile = File(..., description="PDF resume fil
     Returns extracted skills and top matching jobs with scores.
     """
     try:
-        # Validate file type
         if not file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-        # Save the file (returns tuple: file_path, storage_url)
         file_path, storage_url = await save_pdf(file)
 
-        # Get recommendations
+        print(f"\n{'='*60}")
+        print(f"🔄 Processing resume: {file.filename}")
+        print(f"📂 File path: {file_path}")
+        print(f"{'='*60}\n")
+
         result = await recommend_jobs_from_pdf(file_path, top_n=5, use_scraped=False)
 
         if not result.get("success"):
+            print(f"❌ Processing failed: {result.get('error')}")
             raise HTTPException(status_code=400, detail=result.get("error", "Processing failed"))
 
-        return {
+        recommendations = result.get("recommendations", [])
+        extracted_skills = result.get("extracted_skills", result.get("skills", []))
+
+        response = {
             "success": True,
             "message": "Resume processed successfully",
             "file_name": file.filename,
             "file_path": file_path,
             "storage_url": storage_url,
-            "skills": result.get("skills", []),
-            "recommendations": result.get("recommendations", [])
+            "skills": extracted_skills,
+            "recommendations": recommendations,
+            "recommendations_count": len(recommendations)
         }
+
+        if not recommendations:
+            response["info"] = "No job recommendations found. Jobs are scraped automatically every 24 hours."
+
+        return response
     except HTTPException:
         raise
     except ValueError as e:
@@ -80,10 +102,8 @@ async def analyze_resume(file: UploadFile = File(..., description="PDF resume fi
         if not file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-        # Save the file (returns tuple: file_path, storage_url)
         file_path, storage_url = await save_pdf(file)
 
-        # Extract text and skills
         from app.services.pdf_parser import extract_text_from_pdf
         from app.services.skill_extractor import extract_skills
 
@@ -113,7 +133,6 @@ async def get_recommendations(file: UploadFile = File(..., description="PDF resu
         if not file.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-        # Save the file (returns tuple: file_path, storage_url)
         file_path, storage_url = await save_pdf(file)
         result = await recommend_jobs_from_pdf(file_path, top_n=top_n, use_scraped=False)
 
@@ -149,203 +168,21 @@ def recommend_by_skills(request: SkillsRequest):
 @router.get("/jobs", tags=["Jobs"])
 def list_all_jobs(skip: int = 0, limit: int = 10):
     """
-    Get all available jobs from the database.
-    Supports pagination with skip and limit parameters.
+    Get all available jobs from Supabase cache. Supports pagination.
     """
     try:
-        all_jobs = get_all_jobs()
+        all_jobs = get_cached_jobs() or []
         total_count = len(all_jobs)
-
-        # Apply pagination
-        paginated_jobs = all_jobs[skip:skip + limit]
-
+        paginated_jobs = all_jobs[skip: skip + limit]
         return {
             "success": True,
             "total_jobs": total_count,
             "returned_jobs": len(paginated_jobs),
             "skip": skip,
             "limit": limit,
-            "jobs": paginated_jobs
+            "jobs": paginated_jobs,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve jobs: {str(e)}")
 
-
-@router.post("/scrape-jobs", tags=["Jobs"])
-async def trigger_job_scraping(
-    keyword: str = Query("python", description="Job search keyword"),
-    location: str = Query("USA", description="Job location"),
-    force_refresh: bool = Query(False, description="Bypass cache and force fresh scraping")
-):
-    """
-    Scrape jobs from multiple online sources (GitHub, Jooble, Adzuna, RemoteOK, etc).
-    Results are cached for 24 hours unless force_refresh=True, which bypasses cache.
-
-    Parameters:
-    - keyword: Job search keyword (default: "python")
-    - location: Job location (default: "USA")
-    - force_refresh: Bypass cache and force fresh scraping (default: False)
-    """
-    try:
-        from app.services.scraper import scrape_all_jobs
-
-        print(f"\n📮 API Request: /scrape-jobs?keyword={keyword}&location={location}&force_refresh={force_refresh}")
-        scraped_jobs = scrape_all_jobs(keyword=keyword, location=location, force_refresh=force_refresh)
-
-        if not scraped_jobs:
-            print("⚠️  No jobs found, returning empty response")
-            return {
-                "success": False,
-                "message": "No jobs found for the given criteria",
-                "keyword": keyword,
-                "location": location,
-                "force_refresh": force_refresh,
-                "jobs_count": 0,
-                "jobs": []
-            }
-
-        return {
-            "success": True,
-            "message": f"Fetched {len(scraped_jobs)} jobs from multiple sources" + (" (fresh)" if force_refresh else ""),
-            "keyword": keyword,
-            "location": location,
-            "force_refresh": force_refresh,
-            "jobs_count": len(scraped_jobs),
-            "jobs": scraped_jobs
-        }
-    except Exception as e:
-        print(f"❌ Error in scrape-jobs: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Job scraping failed: {str(e)}")
-
-
-@router.post("/scrape-realtime", tags=["Jobs"])
-async def scrape_realtime_jobs(
-    keyword: str = Query("python", description="Job search keyword"),
-    limit: int = Query(30, description="Max jobs per source")
-):
-    """
-    Scrape REAL-TIME jobs from multiple sources and save to files.
-    - Fetches from RemoteOK, GitHub Jobs, Adzuna
-    - Saves to JSON and CSV
-    - Returns file paths and job data
-
-    Parameters:
-    - keyword: Job search keyword (default: "python")
-    - limit: Max jobs per source (default: 30)
-    """
-    try:
-        from app.services.realtime_scraper import scrape_and_save
-
-        print(f"\n📮 Real-time scrape request: keyword={keyword}, limit={limit}")
-
-        # Scrape and save
-        files = scrape_and_save(keyword=keyword, limit_per_source=limit)
-
-        # Also read the JSON to return data
-        json_path = Path(files.get("json", ""))
-        jobs = []
-        if json_path.exists():
-            with open(json_path) as f:
-                data = json.load(f)
-                jobs = data.get("jobs", [])
-
-        return {
-            "success": True,
-            "message": f"Scraped {len(jobs)} real-time jobs from multiple sources",
-            "keyword": keyword,
-            "jobs_count": len(jobs),
-            "files": {
-                "json": files.get("json"),
-                "csv": files.get("csv")
-            },
-            "jobs": jobs
-        }
-    except Exception as e:
-        print(f"❌ Real-time scrape error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Real-time scraping failed: {str(e)}")
-
-
-@router.post("/scrape-linkedin", tags=["Jobs"])
-async def scrape_linkedin_endpoint(
-    position: str = Query("Python Developer", description="Job position to search"),
-    location: str = Query("United States", description="Job location"),
-    work_types: str = Query("Remote,Hybrid", description="Work types (comma-separated): On-site,Hybrid,Remote"),
-    exp_levels: str = Query("Entry level,Associate", description="Experience levels (comma-separated): Internship,Entry level,Associate,Mid-Senior level"),
-    time_filter: str = Query("Past month", description="Time filter: Past 24 hours, Past week, Past month"),
-    max_pages: int = Query(2, description="Maximum pages to scrape (each page = 25 jobs)")
-):
-    """
-    Scrape REAL LinkedIn jobs with Flair skill extraction.
-
-    Parameters:
-    - position: Job position (e.g., "Python Developer")
-    - location: Job location (e.g., "United States")
-    - work_types: Comma-separated work types (On-site, Hybrid, Remote)
-    - exp_levels: Comma-separated experience levels
-    - time_filter: Time filter for job posting
-    - max_pages: Maximum pages to scrape (0-4 pages recommended)
-
-    Returns:
-    - CSV and JSON files with scraped jobs
-    - Each job includes: title, company, location, description, extracted skills
-    """
-    try:
-        from app.services.linkedin_scraper import scrape_linkedin_and_save
-        import pandas as pd
-
-        # Parse comma-separated values
-        work_types_list = [w.strip() for w in work_types.split(",") if w.strip()]
-        exp_levels_list = [e.strip() for e in exp_levels.split(",") if e.strip()]
-
-        print(f"\n📮 LinkedIn scrape request: position={position}, location={location}")
-
-        # Scrape and save
-        files = scrape_linkedin_and_save(
-            position=position,
-            location=location,
-            work_types=work_types_list,
-            exp_levels=exp_levels_list,
-            time_filter=time_filter,
-            max_pages=max_pages
-        )
-
-        # Read saved data
-        from pathlib import Path
-        csv_path = Path(files.get("csv", ""))
-        jobs = []
-
-        if csv_path.exists():
-            df = pd.read_csv(csv_path)
-            jobs = df.to_dict('records')
-
-        return {
-            "success": True,
-            "message": f"Scraped {len(jobs)} real LinkedIn jobs with skill extraction",
-            "position": position,
-            "location": location,
-            "jobs_count": len(jobs),
-            "files": {
-                "csv": files.get("csv"),
-                "json": files.get("json")
-            },
-            "jobs": jobs
-        }
-    except Exception as e:
-        print(f"❌ LinkedIn scrape error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"LinkedIn scraping failed: {str(e)}")
-
-
-@router.get("/health", tags=["Health"])
-def health_check():
-    """API health check endpoint."""
-    return {
-        "status": "ok",
-        "service": "Job Recommendation API",
-        "version": "1.0.0"
-    }
+# Removed public scraping endpoint; scraping now runs via cron/scheduler every 24 hours.

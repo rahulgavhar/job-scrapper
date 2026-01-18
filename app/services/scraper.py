@@ -1,12 +1,12 @@
 """
 Job scraper service that fetches jobs from multiple sources.
-Uses RemoteOK API with local DB fallback.
+Primary source: LinkedIn (web scraping)
+Fallback sources: RemoteOK API, Supabase cache
 Includes Flair NER for skill extraction from job descriptions.
 """
 
 import json
 from datetime import datetime
-from pathlib import Path
 import copy
 import requests
 import logging
@@ -14,8 +14,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Cache file for scraped jobs
-CACHE_FILE = Path("uploads/jobs_cache.json")
+# Cache duration for job data
 CACHE_EXPIRY_HOURS = 24
 
 # Load Flair model once at startup (not on every request)
@@ -56,72 +55,53 @@ def _extract_skills_with_flair(text: str, max_skills: int = 10) -> list[str]:
 
 
 def get_cache_age_hours() -> float:
-    """Get age of cache file in hours"""
-    if CACHE_FILE.exists():
-        cache_time = CACHE_FILE.stat().st_mtime
-        current_time = datetime.now().timestamp()
-        return (current_time - cache_time) / 3600
-    return float('inf')
+    """Cache is managed by Supabase, always fresh"""
+    return 0.0
 
 
 def get_scraped_jobs_from_cache() -> list[dict]:
     """
-    Load jobs from cache file if it exists and is fresh.
+    Load jobs from Supabase cache.
     """
-    if CACHE_FILE.exists():
-        cache_age = get_cache_age_hours()
-        if cache_age < CACHE_EXPIRY_HOURS:
-            try:
-                with open(CACHE_FILE, 'r') as f:
-                    data = json.load(f)
-                    if data.get("jobs"):
-                        print(f"✓ Using cached jobs (age: {cache_age:.1f} hours, {len(data.get('jobs', []))} jobs)")
-                        return data["jobs"]
-            except Exception as e:
-                print(f"Error loading job cache: {e}")
+    try:
+        from app.db.supabase_db import get_all_jobs
+        jobs = get_all_jobs()
+        if jobs:
+            logger.info(f"✓ Retrieved {len(jobs)} jobs from Supabase cache")
+            return jobs
+    except Exception as e:
+        logger.warning(f"Error retrieving cached jobs from Supabase: {e}")
     return []
 
 
-def save_jobs_to_cache(jobs: list[dict]):
+def save_jobs_to_cache(jobs: list[dict], position: str = "general", location: str = "general"):
     """
-    Save scraped jobs to cache file.
+    Save scraped jobs to Supabase cache.
     """
     try:
-        CACHE_FILE.parent.mkdir(exist_ok=True)
-        data = {
-            "jobs": jobs,
-            "cached_at": datetime.now().isoformat(),
-            "total_jobs": len(jobs),
-            "sources": list(set(j.get('source', 'Unknown') for j in jobs))
-        }
-        with open(CACHE_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
-        print(f"✓ Saved {len(jobs)} jobs to cache from sources: {data['sources']}")
+        from app.db.supabase_db import save_jobs
+        save_jobs(jobs, position, location)
+        logger.info(f"✓ Saved {len(jobs)} jobs to Supabase cache")
     except Exception as e:
-        print(f"Error saving job cache: {e}")
+        logger.warning(f"Error saving jobs to Supabase: {e}")
 
 
 def _load_jobs_from_db() -> list[dict]:
-    """Load sample jobs from local DB and extract skills using Flair"""
-    from app.db.fake_db import get_all_jobs as get_db_jobs
-    # work on a copy to avoid mutating the global DB
-    jobs = copy.deepcopy(get_db_jobs())
-    for job in jobs:
-        job.setdefault("source", "Sample DB")
-        job.setdefault("url", "")
-        job.setdefault("posted_at", datetime.now().date().isoformat())
+    """Load jobs from Supabase cache as fallback"""
+    try:
+        from app.db.supabase_db import get_all_jobs
+        jobs = get_all_jobs()
 
-        # Extract skills from description using Flair
-        description = job.get("description", "")
-        if description and not job.get("skills"):
-            skills = _extract_skills_with_flair(description, max_skills=10)
-            if skills:
-                job["skills"] = skills
-            else:
-                job["skills"] = job.get("skills", [])
-        else:
-            job.setdefault("skills", [])
-    return jobs
+        for job in jobs:
+            job.setdefault("source", "Supabase Cache")
+
+        if not jobs:
+            logger.warning("No jobs in Supabase cache")
+
+        return jobs
+    except Exception as e:
+        logger.error(f"Error loading jobs from Supabase: {e}")
+        return []
 
 
 def _fetch_remoteok_jobs(keyword: str = "python", limit: int = 20) -> list[dict]:
@@ -183,10 +163,13 @@ def _fetch_remoteok_jobs(keyword: str = "python", limit: int = 20) -> list[dict]
 
 def scrape_all_jobs(keyword: str = "python", location: str = "USA", force_refresh: bool = False) -> list[dict]:
     """
-    Job fetcher using RemoteOK (live) with local DB fallback.
-    - Uses cache unless force_refresh=True
-    - Tries RemoteOK first; if empty, falls back to local DB
-    - Always returns jobs (never empty)
+    Job fetcher using multiple sources with fallback strategy:
+    1. LinkedIn (live web scraping) - PRIMARY
+    2. RemoteOK API
+    3. Local DB (fallback)
+
+    Uses cache unless force_refresh=True
+    Always returns jobs (never empty)
     """
     try:
         print(f"\n{'='*60}")
@@ -200,19 +183,47 @@ def scrape_all_jobs(keyword: str = "python", location: str = "USA", force_refres
                 print(f"✓ RESULT: {len(cached_jobs)} jobs from cache\n{'='*60}\n")
                 return cached_jobs
 
+        # Try LinkedIn scraper first (primary source)
+        print("🔗 Scraping LinkedIn...")
+        try:
+            from app.services.linkedin_scraper_v2 import scrape_linkedin_jobs
+
+            jobs = scrape_linkedin_jobs(
+                location=location,
+                position=keyword,
+                work_types=["Remote", "Hybrid", "On-site"],
+                experience_levels=["Entry level", "Associate", "Mid-Senior level"],
+                time_filter="Past month",
+                max_results=50
+            )
+
+            if jobs:
+                print(f"✓ LinkedIn: Found {len(jobs)} jobs")
+                save_jobs_to_cache(jobs, position=keyword, location=location)
+                print(f"✓ RESULT: {len(jobs)} jobs from LinkedIn\n{'='*60}\n")
+                return jobs
+            else:
+                print("⚠ LinkedIn: No jobs found")
+        except Exception as e:
+            logger.warning(f"LinkedIn scraping failed: {e}")
+            print(f"✗ LinkedIn scraping error: {e}")
+
         # Try RemoteOK
         print("🌐 Fetching from RemoteOK...")
         jobs = _fetch_remoteok_jobs(keyword=keyword, limit=25)
 
-        # Fallback to local DB
-        if not jobs:
-            print("📦 RemoteOK empty; using local DB fallback")
-            jobs = _load_jobs_from_db()
+        if jobs:
+            save_jobs_to_cache(jobs, position=keyword, location=location)
+            print(f"✓ RESULT: {len(jobs)} jobs from RemoteOK\n{'='*60}\n")
+            return jobs
 
-        # Save to cache
+        # Fallback to local DB
+        print("📦 RemoteOK empty; using local DB fallback")
+        jobs = _load_jobs_from_db()
+
         if jobs:
             save_jobs_to_cache(jobs)
-            print(f"✓ RESULT: {len(jobs)} jobs")
+            print(f"✓ RESULT: {len(jobs)} jobs from local DB")
         else:
             print("⚠ WARNING: No jobs from any source!")
 

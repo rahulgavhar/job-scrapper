@@ -30,7 +30,7 @@ The Job Recommendation API is a FastAPI-based backend system that processes resu
 │  ├──────────────────┬───────────────────┬─────────────────────┤  │
 │  │ File Service     │ PDF Parser        │ Skill Extractor     │  │
 │  ├──────────────────┼───────────────────┼─────────────────────┤  │
-│  │ • Save uploads   │ • Extract text    │ • Flair NER         │  │
+│  │ • Supabase save  │ • Extract text    │ • Flair NER         │  │
 │  │ • Validate files │ • PageHandling    │ • SkillIdentify     │  │
 │  └──────────────────┴───────────────────┴─────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────┐  │
@@ -45,7 +45,7 @@ The Job Recommendation API is a FastAPI-based backend system that processes resu
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │                  Data Layer                                │  │
 │  │  • Fake Database (JOBS_DB)                                 │  │
-│  │  • File Storage (uploads/)                                 │  │
+│  │  • Supabase Storage (resumes bucket)                       │  │
 │  │  • Cache (jobs_cache.json)                                 │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
@@ -86,9 +86,9 @@ Validation (is PDF?)
     ↓
 UUID Generation (unique filename)
     ↓
-Save to Disk (uploads/)
+Upload to Supabase Storage (public/resumes/)
     ↓
-Output: file_path (string)
+Output: file_path (string) & public_url
 ```
 
 #### PDF Parser (pdf_parser.py)

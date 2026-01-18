@@ -23,8 +23,7 @@ class Settings(BaseModel):
     API_PORT: int = 8000
 
     # File upload settings
-    MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
-    UPLOAD_DIR: str = "uploads"
+    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
 
     # NLP Settings
     SKILLS_EXTRACTION_MODEL: str = "kaliani/flair-ner-skill"

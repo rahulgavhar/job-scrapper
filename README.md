@@ -92,12 +92,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. **Create uploads directory**
-```bash
-mkdir uploads
-```
-
-5. **Run the API**
+4. **Run the API**
 ```bash
 uvicorn app.main:app --reload
 ```
@@ -251,11 +246,9 @@ job-scrapper/
 │       ├── matcher.py
 │       ├── scraper.py
 │       └── recommender.py
-├── uploads/          # Directory for uploaded resumes
 ├── .env             # Environment configuration
 ├── .gitignore       # Git ignore file
 ├── Dockerfile       # Docker image configuration
-├── docker-compose.yml
 ├── requirements.txt # Python dependencies
 └── README.md       # This file
 ```
