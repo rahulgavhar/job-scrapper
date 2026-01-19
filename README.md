@@ -7,51 +7,54 @@ A comprehensive backend API that analyzes resume PDFs, extracts skills using NLP
 - **Resume Upload & Analysis**: Upload PDF resumes and extract skills using state-of-the-art NLP models
 - **Skill Extraction**: Uses Flair Named Entity Recognition (NER) to identify technical and professional skills
 - **Job Matching**: Advanced matching algorithm with similarity scoring (exact and fuzzy matching)
-- **Job Scraping**: Integration-ready placeholders for scraping jobs from Indeed, LinkedIn, and other portals
+- **LinkedIn Job Scraping**: Automated background scraping from LinkedIn every 24 hours using Celery
 - **Smart Recommendations**: Returns top job recommendations with match scores and matched skill counts
+- **Cloud Storage**: Supabase integration for resume storage and job caching
+- **Background Tasks**: Celery-powered task queue for non-blocking job scraping
 - **REST API**: Full-featured FastAPI with interactive Swagger documentation
 - **Error Handling**: Comprehensive error handling with detailed error messages
 - **Docker Ready**: Multi-stage Dockerfile and docker-compose configuration included
+- **Scalable Architecture**: Production-ready with Celery workers and Redis message broker
 
 ## API Endpoints
 
 ### Health & Status
-- **GET** `/` - Root endpoint with API information
+- **GET** `/ping` - API ping endpoint
 - **GET** `/health` - Health check endpoint
-- **GET** `/api/ping` - API ping endpoint
 
 ### Resume Management
-- **POST** `/api/upload-resume` - Upload a resume PDF file
-- **POST** `/api/analyze-resume` - Upload resume and extract skills
+- **POST** `/api/upload-resume` - Upload a resume PDF file and get recommendations
+- **POST** `/api/analyze-resume` - Upload resume and extract skills only
 
 ### Job Recommendations
 - **POST** `/api/get-recommendations` - Upload resume and get job recommendations
 - **POST** `/api/recommend-by-skills` - Get recommendations based on provided skills
-- **POST** `/api/scrape-jobs` - Scrape jobs from online sources
 - **GET** `/api/jobs` - List all available jobs with pagination
 
 ### Documentation
 - **GET** `/api/docs` - Interactive Swagger UI documentation
-- **GET** `/api/openapi.json` - OpenAPI schema
 
 ## Architecture
 
 ```
 app/
-├── main.py                 # FastAPI application setup
+├── main.py                      # FastAPI application setup
+├── celery_app.py                # Celery configuration
 ├── api/
-│   └── routes.py          # API endpoint definitions
+│   └── routes.py                # API endpoint definitions
 ├── core/
-│   └── config.py          # Application configuration
+│   └── config.py                # Application configuration
 ├── services/
-│   ├── pdf_parser.py      # PDF text extraction
-│   ├── skill_extractor.py # NLP skill extraction
-│   ├── matcher.py         # Job-skill matching algorithm
-│   ├── scraper.py         # Job scraping service
-│   ├── recommender.py     # Recommendation orchestration
-│   └── file_service.py    # File upload handling
+│   ├── pdf_parser.py            # PDF text extraction
+│   ├── skill_extractor.py       # NLP skill extraction
+│   ├── matcher.py               # Job-skill matching algorithm
+│   ├── linkedin_scraper_simple.py # LinkedIn job scraping
+│   ├── recommender.py           # Recommendation orchestration
+│   ├── file_service.py          # File upload handling
+│   ├── supabase_storage.py      # Cloud storage integration
+│   └── tasks.py                 # Celery background tasks
 └── db/
-    └── fake_db.py         # Sample job database
+    └── supabase_db.py           # Supabase database integration
 ```
 
 ## Technology Stack
@@ -60,9 +63,14 @@ app/
 - **Server**: Uvicorn
 - **NLP**: Flair (Named Entity Recognition)
 - **PDF Processing**: PyPDF2
-- **Web Scraping**: BeautifulSoup4, Requests
+- **Web Scraping**: BeautifulSoup4, Requests, AioHTTP
 - **Data Validation**: Pydantic
+- **Cloud Storage**: Supabase
+- **Task Queue**: Celery
+- **Message Broker**: Redis
+- **Scheduler**: APScheduler
 - **Containerization**: Docker, Docker Compose
+- **HTTP Client**: HTTPX
 
 ## Installation
 
@@ -96,9 +104,11 @@ pip install -r requirements.txt
 
 **Option A: Production Mode (Celery + FastAPI)**
 ```bash
+# Requires Redis running
+# Redis should be accessible at redis://localhost:6379/0 (default)
 python start_api.py
 ```
-This starts both Celery worker and FastAPI server in one process with unified logging.
+This starts both Celery worker and FastAPI server with unified logging and background job scraping.
 
 **Option B: Development Mode (FastAPI only)**
 ```bash
@@ -107,7 +117,7 @@ uvicorn app.main:app --reload
 
 The API will be available at `http://localhost:8000`
 
-> **Note**: For production deployment with background job scraping, use `python start_api.py`. This enables Celery workers for non-blocking LinkedIn scraping. See [CELERY_GUIDE.md](CELERY_GUIDE.md) for details.
+> **Note**: For production deployment with background job scraping via Celery, use `python start_api.py`. Ensure Redis is running and accessible. See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
 ### Docker Setup
 
@@ -125,17 +135,18 @@ docker-compose up --build
 ### 1. Upload Resume and Get Recommendations
 
 ```bash
-curl -X POST "http://localhost:8000/api/get-recommendations" \
-  -F "file=@resume.pdf" \
-  -F "top_n=5"
+curl -X POST "http://localhost:8000/api/upload-resume" \
+  -F "file=@resume.pdf"
 ```
 
 **Response**:
 ```json
 {
   "success": true,
-  "extracted_skills": ["Python", "Django", "REST APIs", "SQL", "Git"],
-  "skills_count": 5,
+  "file_name": "resume.pdf",
+  "file_path": "/path/to/resume.pdf",
+  "storage_url": "https://supabase.../resume.pdf",
+  "skills": ["Python", "Django", "REST APIs", "SQL", "Git"],
   "recommendations": [
     {
       "id": 1,
@@ -177,15 +188,10 @@ curl -X POST "http://localhost:8000/api/analyze-resume" \
 curl "http://localhost:8000/api/jobs?skip=0&limit=10"
 ```
 
-### 5. Scrape Jobs
+### 5. Health Check
 
 ```bash
-curl -X POST "http://localhost:8000/api/scrape-jobs" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "keyword": "Python Developer",
-    "location": "USA"
-  }'
+curl "http://localhost:8000/health"
 ```
 
 ## Configuration
@@ -210,9 +216,27 @@ MAX_SKILLS_EXTRACTED=15
 DEFAULT_TOP_N_RECOMMENDATIONS=5
 MIN_MATCH_SCORE=0.0
 
-# Scraping
-ENABLE_JOB_SCRAPING=True
+# File Upload
+MAX_UPLOAD_SIZE=52428800
+
+# Supabase Configuration
+SUPABASE_URL=https://your-supabase.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_STORAGE_BUCKET=resumes
+USE_SUPABASE_STORAGE=True
+
+# CORS Client URLs
+CLIENT_URL1=https://your-client-1.com
+CLIENT_URL2=https://your-client-2.com
+CLIENT_URL3=https://your-client-3.com
+
+# Celery & Redis
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+
+# Scraper
 SCRAPER_TIMEOUT=30
+ENABLE_JOB_SCRAPING=True
 ```
 
 ## Matching Algorithm
@@ -239,6 +263,7 @@ job-scrapper/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py
+│   ├── celery_app.py
 │   ├── api/
 │   │   ├── __init__.py
 │   │   └── routes.py
@@ -247,20 +272,24 @@ job-scrapper/
 │   │   └── config.py
 │   ├── db/
 │   │   ├── __init__.py
-│   │   └── fake_db.py
+│   │   └── supabase_db.py
 │   └── services/
 │       ├── __init__.py
 │       ├── file_service.py
 │       ├── pdf_parser.py
 │       ├── skill_extractor.py
 │       ├── matcher.py
-│       ├── scraper.py
-│       └── recommender.py
-├── .env             # Environment configuration
-├── .gitignore       # Git ignore file
-├── Dockerfile       # Docker image configuration
-├── requirements.txt # Python dependencies
-└── README.md       # This file
+│       ├── recommender.py
+│       ├── supabase_storage.py
+│       ├── linkedin_scraper_simple.py
+│       └── tasks.py
+├── start_api.py         # Entry point for production (with Celery)
+├── .env                 # Environment configuration
+├── .gitignore           # Git ignore file
+├── Dockerfile           # Docker image configuration
+├── requirements.txt     # Python dependencies
+├── ARCHITECTURE.md      # Architecture documentation
+└── README.md           # This file
 ```
 
 ## API Response Format
@@ -295,20 +324,23 @@ Common HTTP status codes:
 
 - **Skill Extraction**: Uses cached Flair models for faster inference
 - **Job Matching**: O(n*m) complexity where n = skills, m = jobs
-- **PDF Processing**: Supports files up to 10MB by default
-- **Caching**: Job scraping results are cached to avoid rate limiting
+- **PDF Processing**: Supports files up to 50MB
+- **Background Processing**: Celery workers handle LinkedIn scraping without blocking API requests
+- **Job Caching**: Supabase integration caches job listings to minimize scraping and API calls
+- **Redis Optimization**: Redis message broker ensures fast task queuing and result retrieval
+- **Async Operations**: Uses async/await for non-blocking file uploads and processing
 
 ## Future Enhancements
 
-- [ ] Real job portal integration (Indeed API, LinkedIn Scraper)
-- [ ] Database persistence (PostgreSQL/MongoDB)
-- [ ] Authentication and user profiles
-- [ ] Resume storage and history
-- [ ] Advanced filtering and sorting
-- [ ] Job alerts and notifications
-- [ ] Integration with job board APIs
-- [ ] Semantic similarity using embeddings
-- [ ] Machine learning model for better matching
+- [ ] Multiple job portal integration (Indeed API, Glassdoor, etc.)
+- [ ] Advanced filtering and sorting options
+- [ ] Job alerts and email notifications
+- [ ] Semantic similarity using embeddings (BERT/GPT)
+- [ ] Machine learning model for improved matching
+- [ ] User authentication and profiles
+- [ ] Resume versioning and history
+- [ ] Skill validation and certifications
+- [ ] Salary prediction based on skills
 
 ## Testing
 
@@ -326,13 +358,39 @@ pytest tests/ -v
 API_PORT=8001
 ```
 
+### Redis Connection Error
+```bash
+# Ensure Redis is running
+redis-cli ping  # Should return "PONG"
+
+# If Redis is not installed, install via:
+# Windows: Download from https://github.com/microsoftarchive/redis/releases
+# macOS: brew install redis
+# Linux: apt-get install redis-server
+
+# Update .env if Redis is on different host/port
+CELERY_BROKER_URL=redis://your-redis-host:6379/0
+```
+
+### Celery Tasks Not Running
+- Verify Redis is accessible
+- Check Celery worker logs for errors
+- Ensure `python start_api.py` is running (not just `uvicorn`)
+
 ### PDF Extraction Issues
 - Ensure PDF is text-based (not scanned images)
-- Check file size is under 10MB
+- Check file size is under 50MB
+- Verify file is a valid PDF
 
 ### Skill Extraction Not Working
 - Verify Flair model is downloaded: `kaliani/flair-ner-skill`
 - Check internet connection for first-time model download
+- Ensure torch is properly installed
+
+### Supabase Connection Error
+- Verify SUPABASE_URL and SUPABASE_ANON_KEY in .env
+- Check Supabase project is active
+- Ensure storage bucket exists and is accessible
 
 ### Docker Build Issues
 - Clear Docker cache: `docker system prune`
